@@ -1,4 +1,5 @@
 import Foundation
+import IMessageCore
 
 // main, pinning, ckDND are read protected on sonoma
 private let pinningBundleID = "com.apple.messages.pinning"
@@ -99,7 +100,9 @@ enum DefaultsKeys {
 enum Defaults {
     // Suite name kept as "swift-server" to preserve users' existing prefs
     // after the package rename — changing it would orphan their stored values.
-    public static let imessage = UserDefaults(suiteName: "com.automattic.beeper.desktop.swift-server")!
+    public static let imessage = UserDefaults(suiteName:
+        EmbeddingPolicy.configuration?.preferencesDomain ?? "com.automattic.beeper.desktop.swift-server"
+    )!
     private static let ncPrefs = UserDefaults(suiteName: "com.apple.ncprefs")
 
     static func registerDefaults() {
@@ -157,6 +160,17 @@ enum Defaults {
         #endif
 
         imessage.register(defaults: defaults)
+    }
+
+    static var misfirePreventionEnabled: Bool {
+        EmbeddingPolicy.isEmbedded || imessage.bool(forKey: DefaultsKeys.misfirePrevention)
+    }
+
+    static var misfirePreventionFallbackStrategy: String? {
+        // This avoids the sleep-only fallback. A focus event is NOT proof of
+        // recipient identity; live sending still needs separate qualification.
+        EmbeddingPolicy.isEmbedded ? "focus-waiter" :
+            imessage.string(forKey: DefaultsKeys.misfirePreventionFallbackStrategy)
     }
 
     static var shouldCoordinateWindow: Bool { Self.imessage.bool(forKey: DefaultsKeys.windowCoordination) }
@@ -235,6 +249,13 @@ enum Defaults {
 extension Defaults {
     @inline(__always)
     static subscript(dynamicMember keyPath: KeyPath<DefaultsKeys.Type, String>) -> Bool {
-        Defaults.imessage.bool(forKey: DefaultsKeys.self[keyPath: keyPath])
+        let key = DefaultsKeys.self[keyPath: keyPath]
+        if EmbeddingPolicy.isEmbedded && [
+            DefaultsKeys.deepLinkTracingPII,
+            DefaultsKeys.misfirePreventionTracingPII,
+            DefaultsKeys.misfirePreventionTracing,
+            DefaultsKeys.settingsMenuItemInjection
+        ].contains(key) { return false }
+        return Defaults.imessage.bool(forKey: key)
     }
 }

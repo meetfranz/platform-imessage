@@ -185,7 +185,7 @@ final class MessagesController {
     // ignores the service (SMS or iMessage) and matches contact identifiers since it's merged in the UI
     private func assertSelectedThread(threadID: String) throws {
         let hashedThreadID = Hasher.thread.tokenizeRemembering(pii: threadID)
-        guard Defaults.imessage.bool(forKey: DefaultsKeys.misfirePrevention) else {
+        guard Defaults.misfirePreventionEnabled else {
             log.debug("NOT ensuring selected thread, misfire prevention is off: \(hashedThreadID)")
             return
         }
@@ -216,7 +216,7 @@ final class MessagesController {
         try retry(withTimeout: 1.2, interval: 0.05) {
             attempt += 1
             do {
-                let strategy = Defaults.imessage.string(forKey: DefaultsKeys.misfirePreventionFallbackStrategy)
+                let strategy = Defaults.misfirePreventionFallbackStrategy
                 if Defaults.misfirePreventionTracing, !hasLoggedAboutStrategy {
                     log.debug("misfire prevention: using strategy \"\(strategy ?? "<nil>")\"")
                     hasLoggedAboutStrategy = true

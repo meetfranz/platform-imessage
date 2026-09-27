@@ -25,6 +25,8 @@ public struct IMessageLogHandler: LogHandler {
     }
 
     public func log(event: LogEvent) {
+        // No upstream free-text diagnostics leave an embedded process.
+        guard !EmbeddingPolicy.isEmbedded else { return }
         let timestamp = dateFormatter.string(from: Date())
 
         let formattedMessage = "\(timestamp) [\(event.level):\(identifier)] \(event.message)"

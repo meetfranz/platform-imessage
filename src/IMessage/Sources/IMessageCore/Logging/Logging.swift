@@ -4,6 +4,7 @@ import Foundation
 
 public extension Logger {
     init(imessageLabel label: String? = nil) {
+        _ = EmbeddingPolicy.configuration
         if let label {
             self.init(label: "sws.\(label)")
         } else {
@@ -12,6 +13,7 @@ public extension Logger {
     }
 
     init(windowControlLabel label: String? = nil) {
+        _ = EmbeddingPolicy.configuration
         if let label {
             self.init(label: "wc.\(label)")
         } else {
@@ -34,7 +36,12 @@ public enum Log {
     /// more specific logger.
     public static let `default` = Logger(imessageLabel: nil)
 
-    public static var file: URL? = {
+    public static var file: URL? {
+        get { EmbeddingPolicy.isEmbedded ? nil : legacyFile }
+        set { if !EmbeddingPolicy.isEmbedded { legacyFile = newValue } }
+    }
+
+    private static var legacyFile: URL? = {
         if let directoryPath = ProcessInfo.processInfo.environment[directoryPathEnvironmentKey], !directoryPath.isEmpty {
             return URL(fileURLWithPath: directoryPath, isDirectory: true)
                 .appendingPathComponent("platform-imessage.log")
@@ -73,7 +80,7 @@ public enum Log {
     }
 
     public static func emitToConsole(_ line: String) {
-        guard consoleOutputEnabled else { return }
+        guard !EmbeddingPolicy.isEmbedded, consoleOutputEnabled else { return }
         consoleEmitter(line)
     }
 }

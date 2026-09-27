@@ -12,6 +12,30 @@ private let log = Logger(imessageLabel: "imessage")
 public enum IMessageHost {
     private static let bootstrapLock = NSLock()
     private static var didBootstrap = false
+    private static var didBootstrapLogging = false
+
+    // Caller holds bootstrapLock; configure-only must also protect ordinary
+    // SwiftLog calls made before host bootstrap, not just direct handler calls.
+    private static func bootstrapLogging(logLevel: SwiftLogger.Level = .info) {
+        guard !didBootstrapLogging else { return }
+        didBootstrapLogging = true
+        LoggingSystem.bootstrap { identifier in
+            IMessageLogHandler(identifier: identifier, logLevel: logLevel)
+        }
+    }
+
+    /// Must precede bootstrap and all other upstream usage. No live host is started.
+    public static func configureForEmbedding(
+        preferencesDomain: String, useSecondaryInstance: Bool = false
+    ) throws {
+        bootstrapLock.lock()
+        defer { bootstrapLock.unlock() }
+        try EmbeddingPolicy.configure(.init(
+            preferencesDomain: preferencesDomain,
+            useSecondaryInstance: useSecondaryInstance
+        ))
+        bootstrapLogging()
+    }
 
     public static var isNotificationsEnabledForMessages: Bool {
         Defaults.isNotificationsEnabledForApp(bundleID: messagesBundleID)
@@ -47,13 +71,13 @@ public enum IMessageHost {
             return
         }
         didBootstrap = true
+        _ = EmbeddingPolicy.configuration
+        bootstrapLogging()
         bootstrapLock.unlock()
 
         // This needs to be ready by the first `debugLog` call, or else
         // subsequent calls to that function are dropped.
-        LoggingSystem.bootstrap { identifier in
-            IMessageLogHandler(identifier: identifier)
-        }
+        // Logging was initialized under bootstrapLock above.
 
         Task {
             // We trim as we log (within reason), but always try to do it on startup.
@@ -75,7 +99,7 @@ public enum IMessageHost {
         Defaults.registerDefaults()
 
         Task { @MainActor in
-            guard Defaults.imessage.bool(forKey: DefaultsKeys.settingsMenuItemInjection) else { return }
+            guard !EmbeddingPolicy.isEmbedded, Defaults.imessage.bool(forKey: DefaultsKeys.settingsMenuItemInjection) else { return }
 
             if #available(macOS 13, *) {
                 log.debug("trying to inject settings menu item whenever possible")
@@ -87,6 +111,12 @@ public enum IMessageHost {
     }
 
     public static func bootstrapWithOptions(dataDirPath: String, verbose: Bool, useSecondaryInstance: Bool) {
+        bootstrapLock.lock()
+        defer { bootstrapLock.unlock() }
+        guard !didBootstrap else { return }
+        didBootstrap = true
+        _ = EmbeddingPolicy.configuration
+
         Preferences.setLoggingDirectory(dataDirPath)
         Preferences.setUseSecondaryInstance(useSecondaryInstance)
         Preferences.configureHashing(defaultEnabled: false)
@@ -94,17 +124,7 @@ public enum IMessageHost {
         Log.consoleOutputEnabled = verbose
         Defaults.registerDefaults()
 
-        bootstrapLock.lock()
-        defer { bootstrapLock.unlock() }
-        guard !didBootstrap else { return }
-        didBootstrap = true
-
-        LoggingSystem.bootstrap { identifier in
-            IMessageLogHandler(
-                identifier: identifier,
-                logLevel: verbose ? .trace : .info
-            )
-        }
+        bootstrapLogging(logLevel: verbose ? .trace : .info)
 
         Task {
             try? await LogFileCoordinator.shared?.tryTrimming()
@@ -139,6 +159,7 @@ public enum IMessageHost {
     }
 
     public static func revealSettingsForUserInteraction() async {
+        guard !EmbeddingPolicy.isEmbedded else { return }
         log.debug("told to reveal settings window")
         await MainActor.run {
             guard #available(macOS 13, *) else {

@@ -15,7 +15,10 @@ public actor LogFileCoordinator {
 
     private var handle: FileHandle
 
+    public enum InitializationError: Error { case disabledForEmbedding }
+
     public init(url: URL) throws {
+        guard !EmbeddingPolicy.isEmbedded else { throw InitializationError.disabledForEmbedding }
         handle = try Self.handleFor(url)
         fileURL = url
 
