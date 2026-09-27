@@ -35,6 +35,10 @@ var products: [Product] = [
         name: "IMessage",
         targets: ["IMessage"]
     ),
+    .library(
+        name: "IMDatabase",
+        targets: ["IMDatabase"]
+    ),
     .executable(name: "imessage-cli", targets: ["IMessageCLI"]),
     .executable(name: "IMDatabaseTestBench", targets: ["IMDatabaseTestBench"]),
 ]

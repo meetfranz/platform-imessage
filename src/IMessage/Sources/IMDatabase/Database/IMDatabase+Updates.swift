@@ -19,16 +19,19 @@ ORDER BY
     m.ROWID ASC
 """
 
-package struct UpdatedMessageChange {
-    package let rowID: Int
-    package let chatGUID: String
-    package let isNew: Bool
-    package let wasRead: Bool
-    package let wasEdited: Bool
+public struct UpdatedMessageChange {
+    public let rowID: Int
+    public let chatGUID: String
+    public let isNew: Bool
+    public let wasRead: Bool
+    public let wasEdited: Bool
     /// A late-hydration update (link preview or attachment load surfacing after
     /// the row was first emitted). Consumers treat it identically to an edit:
     /// it forces a full repatch rather than a read-receipt patch.
-    package let isHydrationUpdate: Bool
+    ///
+    /// Always `false` in results from `IMDatabase.messages(since:)`; only the
+    /// IMessage event watcher sets it.
+    public let isHydrationUpdate: Bool
 
     package init(
         rowID: Int,
@@ -58,10 +61,10 @@ package struct UpdatedMessageChange {
     }
 }
 
-package struct UpdatedMessagesQueryResult {
-    package let updatedMessages: [UpdatedMessageChange]
-    package let unresolvedNewMessageRowIDs: [Int]
-    package let nextCursor: MessageUpdatesCursor
+public struct UpdatedMessagesQueryResult {
+    public let updatedMessages: [UpdatedMessageChange]
+    public let unresolvedNewMessageRowIDs: [Int]
+    public let nextCursor: MessageUpdatesCursor
 
     package init(
         updatedMessages: [UpdatedMessageChange],
@@ -75,7 +78,9 @@ package struct UpdatedMessagesQueryResult {
 }
 
 extension IMDatabase {
-    package
+    /// Not thread-safe; serialize calls with all other access to this instance.
+    /// See docs/franz-read-api.md for cursor and retry semantics.
+    public
     func messages(since cursor: MessageUpdatesCursor) throws -> UpdatedMessagesQueryResult {
         let statement = try cachedStatement(forEscapedSQL: updatedMessagesSinceQuery)
 
