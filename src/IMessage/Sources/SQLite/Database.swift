@@ -6,6 +6,9 @@ private let log = Logger(label: "sqlite")
 
 public final class Database {
     var connection: OpaquePointer?
+    // the scope whose progress handler is installed on `connection`, if any;
+    // see `withOperationLimits(_:_:)`
+    var activeOperationLimitScope: OperationLimitScope?
 
     public struct OpenFlags: RawRepresentable, OptionSet {
         public let rawValue: Int32

@@ -1,7 +1,8 @@
 import SQLite3
 
 public struct SQLiteError: Error {
-    let code: Int
+    /// The primary SQLite result code, e.g. `SQLITE_INTERRUPT`.
+    public let code: Int
     let localizedDescription: String
 
     public init(code: CInt) {

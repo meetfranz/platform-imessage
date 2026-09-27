@@ -14,8 +14,29 @@ extension String: ColumnValue {
         from statement: OpaquePointer,
         at index: Column.Index,
         ) throws(Column.Error) -> String {
+        // `sqlite3_column_text` must come first: it may convert the value,
+        // which changes the length `sqlite3_column_bytes` reports
         guard let ptr = sqlite3_column_text(statement, index) else { throw .outOfMemory }
-        return String(cString: ptr)
+        let length = sqlite3_column_bytes(statement, index)
+
+        // read exactly `length` bytes; `String(cString:)` would stop at an
+        // embedded NUL
+        let buffer = UnsafeBufferPointer(start: ptr, count: Int(length))
+
+        // reject instead of substituting U+FFFD, which could make distinct
+        // byte sequences decode to the same string
+        var decoder = UTF8()
+        var iterator = buffer.makeIterator()
+        decoding: while true {
+            switch decoder.decode(&iterator) {
+            case .scalarValue: continue
+            case .emptyInput: break decoding
+            case .error: throw .invalidUTF8(columnIndex: index)
+            }
+        }
+
+        // copies, because this pointer is invalidated when we step/reset
+        return String(decoding: buffer, as: UTF8.self)
     }
 }
 

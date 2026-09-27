@@ -16,6 +16,8 @@ public extension Column {
         case expectedSpecificType(columnIndex: Int32, desired: Type, actual: Type, sourceLocation: SourceLocation)
         case expectedSomeNonNull(columnIndex: Int32, preference: Type?, sourceLocation: SourceLocation)
         case outOfMemory
+        /// Text that isn't valid UTF-8. Carries no part of the value.
+        case invalidUTF8(columnIndex: Int32)
     }
 }
 
@@ -31,6 +33,7 @@ extension Column.Error: CustomStringConvertible {
                 "expected some non-null in column \(columnIndex), is actually null \(sourceLocation)"
             }
         case .outOfMemory: "out of memory"
+        case let .invalidUTF8(columnIndex): "invalid UTF-8 text in column \(columnIndex)"
         }
     }
 }

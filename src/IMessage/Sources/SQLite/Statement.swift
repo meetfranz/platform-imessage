@@ -28,7 +28,10 @@ public final class Statement {
     }
 
     deinit {
-        try! SQLiteError.check(sqlite3_finalize(handle))
+        // sqlite3_finalize always releases the statement; its result only
+        // repeats the most recent evaluation error (e.g. SQLITE_INTERRUPT),
+        // which was already reported by the step that produced it.
+        sqlite3_finalize(handle)
     }
 }
 
@@ -94,19 +97,19 @@ public extension Statement {
 
 public extension Statement {
     func stepUntilDone(handlingRows rowHandler: (_ selected: borrowing Row) throws -> Void) throws {
-        defer { try! SQLiteError.check(sqlite3_reset(handle)) }
-
-        while try SQLiteError.check(sqlite3_step(handle), permitting: [SQLITE_ROW, SQLITE_DONE]) == SQLITE_ROW {
-            try rowHandler(Row(accessingColumnsOf: self))
+        try resettingAfterEvaluation {
+            while try SQLiteError.check(sqlite3_step(handle), permitting: [SQLITE_ROW, SQLITE_DONE]) == SQLITE_ROW {
+                try rowHandler(Row(accessingColumnsOf: self))
+            }
         }
     }
 
     func stepUntilStopped(handlingRows rowHandler: (_ selected: borrowing Row) throws -> Bool) throws {
-        defer { try! SQLiteError.check(sqlite3_reset(handle)) }
-
-        while try SQLiteError.check(sqlite3_step(handle), permitting: [SQLITE_ROW, SQLITE_DONE]) == SQLITE_ROW {
-            guard try rowHandler(Row(accessingColumnsOf: self)) else {
-                return
+        try resettingAfterEvaluation {
+            while try SQLiteError.check(sqlite3_step(handle), permitting: [SQLITE_ROW, SQLITE_DONE]) == SQLITE_ROW {
+                guard try rowHandler(Row(accessingColumnsOf: self)) else {
+                    return
+                }
             }
         }
     }
@@ -127,5 +130,23 @@ public extension Statement {
             }
         })
         return results
+    }
+}
+
+private extension Statement {
+    /// Always resets the statement after `body`, so it can be evaluated again.
+    ///
+    /// When `body` fails, `sqlite3_reset` repeats the failing step's result
+    /// (e.g. `SQLITE_INTERRUPT`), so the primary error is rethrown instead.
+    /// When `body` succeeds or stops early, a reset failure is new information
+    /// and is thrown.
+    func resettingAfterEvaluation(_ body: () throws -> Void) throws {
+        do {
+            try body()
+        } catch {
+            sqlite3_reset(handle)
+            throw error
+        }
+        try SQLiteError.check(sqlite3_reset(handle))
     }
 }
